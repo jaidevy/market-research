@@ -599,6 +599,7 @@ export function App() {
     node_key: "",
     node_type: "agent",
     label: "",
+    objective: "",
     agent: "",
     toolsText: "",
     skillsText: "",
@@ -624,6 +625,8 @@ export function App() {
     description: "",
     version: "1.0",
   });
+  const [workflowBuilderMode, setWorkflowBuilderMode] = useState("basic"); // basic | advanced
+  const [workflowEditorTab, setWorkflowEditorTab] = useState("node"); // node | edge
   const [workflowRunForm, setWorkflowRunForm] = useState({
     objective: "Research the latest developments in open-source AI agent frameworks and produce a short comparison brief.",
     customer_id: "Jaidev",
@@ -729,6 +732,61 @@ export function App() {
     return data;
   };
 
+  const resetNodeDraft = () => {
+    setNodeDraft({
+      node_key: "",
+      node_type: "agent",
+      label: "",
+      objective: "",
+      agent: "",
+      toolsText: "",
+      skillsText: "",
+      configPairs: [],
+      x: 120,
+      y: 80,
+    });
+    setEditingNodeIndex(null);
+  };
+
+  const resetEdgeDraft = () => {
+    setEdgeDraft({
+      source_node_key: "",
+      target_node_key: "",
+      conditionPairs: [],
+      feedbackLoop: false,
+    });
+    setEditingEdgeIndex(null);
+  };
+
+  const loadNodeDraft = (node, index) => {
+    const resolvedKey = String(node?.key || node?.node_key || "").trim();
+    setNodeDraft({
+      node_key: resolvedKey,
+      node_type: String(node?.type || node?.node_type || "agent").trim() || "agent",
+      label: String(node?.label || resolvedKey).trim(),
+      objective: String(node?.objective || "").trim(),
+      agent: String(node?.agent || "").trim(),
+      toolsText: Array.isArray(node?.tools) ? node.tools.map((tool) => String(tool || "").trim()).filter(Boolean).join(", ") : "",
+      skillsText: Array.isArray(node?.skills) ? node.skills.map((skill) => String(skill || "").trim()).filter(Boolean).join(", ") : "",
+      configPairs: objToPairs(node?.config || {}),
+      x: Number(node?.x ?? 120),
+      y: Number(node?.y ?? 80),
+    });
+    setEditingNodeIndex(index);
+    setWorkflowEditorTab("node");
+  };
+
+  const loadEdgeDraft = (edge, index) => {
+    setEdgeDraft({
+      source_node_key: String(edge?.from || "").trim(),
+      target_node_key: String(edge?.to || "").trim(),
+      conditionPairs: objToPairs(edge?.condition || {}),
+      feedbackLoop: !!edge?.feedback_loop,
+    });
+    setEditingEdgeIndex(index);
+    setWorkflowEditorTab("edge");
+  };
+
   const saveWorkflowTemplate = async (template, changes) => {
     if (!template?.id) {
       throw new Error("Select a workflow template first.");
@@ -785,7 +843,7 @@ export function App() {
     return created;
   };
 
-  const addWorkflowNode = async (template) => {
+  const saveWorkflowNode = async (template) => {
     const key = String(nodeDraft.node_key || "").trim();
     if (!key) {
       throw new Error("Node key is required.");
@@ -802,18 +860,23 @@ export function App() {
       // Auto-bind from selected agent unless a manual override is provided.
       tools: manualTools.length ? manualTools : bound.tools,
       skills: manualSkills.length ? manualSkills : bound.skills,
-      objective: String(nodeDraft.label || key).trim(),
+      objective: String(nodeDraft.objective || nodeDraft.label || key).trim(),
+      config: pairsToObj(nodeDraft.configPairs),
+      x: Number(nodeDraft.x || 0),
+      y: Number(nodeDraft.y || 0),
     };
     const existingNodes = Array.isArray(template?.nodes) ? template.nodes : [];
-    const nodes = existingNodes.some((node) => String(node.key || node.node_key) === key)
-      ? existingNodes.map((node) => String(node.key || node.node_key) === key ? { ...node, ...nextNode } : node)
-      : [...existingNodes, nextNode];
+    const nodes = editingNodeIndex !== null
+      ? existingNodes.map((node, index) => (index === editingNodeIndex ? { ...node, ...nextNode } : node))
+      : existingNodes.some((node) => String(node.key || node.node_key) === key)
+        ? existingNodes.map((node) => String(node.key || node.node_key) === key ? { ...node, ...nextNode } : node)
+        : [...existingNodes, nextNode];
     const saved = await saveWorkflowTemplate(template, { nodes });
-    setNodeDraft((prev) => ({ ...prev, node_key: "", label: "", agent: "", toolsText: "", skillsText: "" }));
+    resetNodeDraft();
     return saved;
   };
 
-  const addWorkflowEdge = async (template) => {
+  const saveWorkflowEdge = async (template) => {
     const source = String(edgeDraft.source_node_key || "").trim();
     const target = String(edgeDraft.target_node_key || "").trim();
     if (!source || !target) {
@@ -829,14 +892,56 @@ export function App() {
       ...(Object.keys(condition).length ? { condition } : {}),
       ...(edgeDraft.feedbackLoop ? { feedback_loop: true } : {}),
     };
-    const edges = [...(Array.isArray(template?.edges) ? template.edges : []), nextEdge];
+    const currentEdges = Array.isArray(template?.edges) ? template.edges : [];
+    const edges = editingEdgeIndex !== null
+      ? currentEdges.map((edge, index) => (index === editingEdgeIndex ? nextEdge : edge))
+      : [...currentEdges, nextEdge];
     const saved = await saveWorkflowTemplate(template, { edges });
-    setEdgeDraft({ source_node_key: "", target_node_key: "", conditionPairs: [], feedbackLoop: false });
+    resetEdgeDraft();
     return saved;
   };
 
+  const removeWorkflowNode = async (template, index) => {
+    const existingNodes = Array.isArray(template?.nodes) ? template.nodes : [];
+    const removed = existingNodes[index];
+    const removedKey = String(removed?.key || removed?.node_key || "").trim();
+    const nodes = existingNodes.filter((_, nodeIndex) => nodeIndex !== index);
+    const edges = (Array.isArray(template?.edges) ? template.edges : []).filter((edge) => {
+      const from = String(edge?.from || "").trim();
+      const to = String(edge?.to || "").trim();
+      return from !== removedKey && to !== removedKey;
+    });
+    if (editingNodeIndex === index) {
+      resetNodeDraft();
+    }
+    return saveWorkflowTemplate(template, { nodes, edges });
+  };
+
   const removeWorkflowEdge = async (template, index) => {
+    if (editingEdgeIndex === index) {
+      resetEdgeDraft();
+    }
     const edges = (Array.isArray(template?.edges) ? template.edges : []).filter((_, edgeIndex) => edgeIndex !== index);
+    return saveWorkflowTemplate(template, { edges });
+  };
+
+  const moveWorkflowNode = async (template, index, direction) => {
+    const nodes = [...(Array.isArray(template?.nodes) ? template.nodes : [])];
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= nodes.length) {
+      return null;
+    }
+    [nodes[index], nodes[nextIndex]] = [nodes[nextIndex], nodes[index]];
+    return saveWorkflowTemplate(template, { nodes });
+  };
+
+  const moveWorkflowEdge = async (template, index, direction) => {
+    const edges = [...(Array.isArray(template?.edges) ? template.edges : [])];
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= edges.length) {
+      return null;
+    }
+    [edges[index], edges[nextIndex]] = [edges[nextIndex], edges[index]];
     return saveWorkflowTemplate(template, { edges });
   };
 
@@ -2804,16 +2909,18 @@ export function App() {
                 </div>
                 <p className="subtle">Manage workflow templates, nodes, edges, conditions, feedback loops, and agent/tool bindings.</p>
                 <div className="workflow-crud-layout">
-                  <section className="workflow-crud-column">
-                    <div className="workflow-crud-panel">
+                  <section className="workflow-crud-column workflow-admin-column">
+                    <details className="workflow-admin-details">
+                      <summary>Template Management (Optional)</summary>
+                      <div className="workflow-crud-panel">
                       <h4>Template Actions</h4>
                       <div className="workflow-action-row">
-                        <button type="button" className="secondary" onClick={() => withOut("seedWorkflowTemplates", seedWorkflowTemplates)} disabled={busy}>Seed Defaults</button>
-                        <button type="button" className="secondary" onClick={() => withOut("workflowTemplates", hydrateWorkflowTemplates, { notifySuccess: false })} disabled={busy}>Refresh Templates</button>
+                        <IconActionButton icon="◎" label="Seed defaults" tone="success" onClick={() => withOut("seedWorkflowTemplates", seedWorkflowTemplates)} disabled={busy} />
+                        <IconActionButton icon="⟳" label="Refresh templates" tone="info" onClick={() => withOut("workflowTemplates", hydrateWorkflowTemplates, { notifySuccess: false })} disabled={busy} />
                       </div>
                     </div>
 
-                    <div className="workflow-crud-panel workflow-builder-panel">
+                    <div className="workflow-crud-panel">
                       <h4>Create New Workflow</h4>
                       <div className="ops-form-grid">
                         <input
@@ -2833,14 +2940,15 @@ export function App() {
                         value={workflowTemplateDraft.description}
                         onChange={(event) => setWorkflowTemplateDraft((prev) => ({ ...prev, description: event.target.value }))}
                       />
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => withOut("workflowTemplateCreate", createWorkflowTemplate)}
-                        disabled={busy}
-                      >
-                        Create Workflow
-                      </button>
+                      <div className="workflow-action-row">
+                        <IconActionButton
+                          icon="+"
+                          label="Create workflow"
+                          tone="success"
+                          onClick={() => withOut("workflowTemplateCreate", createWorkflowTemplate)}
+                          disabled={busy}
+                        />
+                      </div>
                     </div>
 
                     <div className="workflow-crud-panel">
@@ -2864,72 +2972,394 @@ export function App() {
                         <article className="overview-metric"><span>Version</span><strong>{selectedTemplate?.version || "-"}</strong></article>
                       </div>
                     </div>
+                    </details>
                   </section>
 
-                  <section className="workflow-crud-column">
-                    <div className="workflow-crud-panel">
-                      <h4>Workflow Nodes</h4>
-                      <div className="workflow-node-list">
-                        {nodes.length ? nodes.map((node) => (
-                          <div key={node.key || node.node_key} className="workflow-node-row">
-                            <strong>{node.label || node.key}</strong>
-                            <span>{node.agent || "No agent"}</span>
-                            <small>{(node.tools || []).join(", ") || "No tools"}</small>
-                          </div>
-                        )) : <p className="subtle">No nodes available.</p>}
-                      </div>
-                    </div>
-
-                    <div className="workflow-crud-panel workflow-edge-list">
-                      <h4>Conditions and Feedback Loops</h4>
-                      {edges.length ? edges.map((edge, index) => (
-                        <div key={`${edge.from}-${edge.to}-${index}`} className="workflow-edge-row">
-                          <div>
-                            <strong>{edge.from} → {edge.to}</strong>
-                            <small>{conditionText(edge)}</small>
-                          </div>
-                          <div className="workflow-edge-actions">
-                            {edge.feedback_loop || nodes.findIndex((node) => String(node.key || node.node_key) === String(edge.to)) < nodes.findIndex((node) => String(node.key || node.node_key) === String(edge.from)) ? <span className="chip">feedback</span> : null}
-                            <button className="secondary" type="button" onClick={() => withOut("workflowEdgeDelete", () => removeWorkflowEdge(selectedTemplate, index))} disabled={busy}>Remove</button>
-                          </div>
-                        </div>
-                      )) : <p className="subtle">No edges available.</p>}
-                    </div>
-
+                  <section className="workflow-crud-column workflow-edit-column">
                     <div className="workflow-crud-panel workflow-builder-panel">
-                      <h4>Visual Builder</h4>
-                      <div className="ops-form-grid">
-                        <input placeholder="node key" value={nodeDraft.node_key} onChange={(event) => setNodeDraft((prev) => ({ ...prev, node_key: event.target.value }))} />
-                        <input placeholder="label" value={nodeDraft.label} onChange={(event) => setNodeDraft((prev) => ({ ...prev, label: event.target.value }))} />
-                        <select value={nodeDraft.node_type} onChange={(event) => setNodeDraft((prev) => ({ ...prev, node_type: event.target.value }))}>
-                          <option value="agent">agent</option>
-                          <option value="final">final</option>
-                        </select>
-                        <select value={nodeDraft.agent} onChange={(event) => setNodeDraft((prev) => ({ ...prev, agent: event.target.value }))}>
-                          <option value="">Select agent</option>
-                          {agents.map((agent) => <option key={agent.id} value={agent.name}>{agent.name}</option>)}
-                        </select>
-                        <input placeholder="tools override (optional)" value={nodeDraft.toolsText} onChange={(event) => setNodeDraft((prev) => ({ ...prev, toolsText: event.target.value }))} />
-                        <input placeholder="skills override (optional)" value={nodeDraft.skillsText} onChange={(event) => setNodeDraft((prev) => ({ ...prev, skillsText: event.target.value }))} />
+                      <div className="workflow-form-header">
+                        <h4>Visual Builder</h4>
+                        <div className="workflow-edge-actions workflow-builder-head-actions">
+                          <div className="workflow-mode-toggle" role="group" aria-label="Builder mode">
+                            <button
+                              type="button"
+                              className={workflowBuilderMode === "basic" ? "chip" : "chip chip-neutral"}
+                              onClick={() => setWorkflowBuilderMode("basic")}
+                            >
+                              Basic
+                            </button>
+                            <button
+                              type="button"
+                              className={workflowBuilderMode === "advanced" ? "chip" : "chip chip-neutral"}
+                              onClick={() => setWorkflowBuilderMode("advanced")}
+                            >
+                              Advanced
+                            </button>
+                          </div>
+                          <span className="chip">Node mode: {editingNodeIndex !== null ? "edit" : "add"}</span>
+                          <span className="chip">Edge mode: {editingEdgeIndex !== null ? "edit" : "add"}</span>
+                        </div>
                       </div>
+                      <div className="workflow-editor-tabs" role="tablist" aria-label="Builder editor tab">
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={workflowEditorTab === "node"}
+                          className={workflowEditorTab === "node" ? "workflow-editor-tab workflow-editor-tab-active" : "workflow-editor-tab"}
+                          onClick={() => setWorkflowEditorTab("node")}
+                        >
+                          Node Editor
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={workflowEditorTab === "edge"}
+                          className={workflowEditorTab === "edge" ? "workflow-editor-tab workflow-editor-tab-active" : "workflow-editor-tab"}
+                          onClick={() => setWorkflowEditorTab("edge")}
+                        >
+                          Edge Editor
+                        </button>
+                      </div>
+                      <p className="subtle">{workflowBuilderMode === "basic" ? "Basic mode shows only essential fields." : "Advanced mode exposes full controls for the selected editor tab."}</p>
+
+                      {workflowEditorTab === "node" ? (
+                        <>
+                      <h5 className="workflow-subhead">Node Details</h5>
+                      <div className="ops-form-grid workflow-form-grid">
+                        <label className="workflow-field">
+                          <span className="workflow-field-label">Node Key</span>
+                          <input value={nodeDraft.node_key} onChange={(event) => setNodeDraft((prev) => ({ ...prev, node_key: event.target.value }))} />
+                        </label>
+                        <label className="workflow-field">
+                          <span className="workflow-field-label">Node Label</span>
+                          <input value={nodeDraft.label} onChange={(event) => setNodeDraft((prev) => ({ ...prev, label: event.target.value }))} />
+                        </label>
+                        <label className="workflow-field">
+                          <span className="workflow-field-label">Objective</span>
+                          <input value={nodeDraft.objective} onChange={(event) => setNodeDraft((prev) => ({ ...prev, objective: event.target.value }))} />
+                        </label>
+                        <label className="workflow-field">
+                          <span className="workflow-field-label">Node Type</span>
+                          <select value={nodeDraft.node_type} onChange={(event) => setNodeDraft((prev) => ({ ...prev, node_type: event.target.value }))}>
+                            <option value="agent">agent</option>
+                            <option value="tool">tool</option>
+                            <option value="decision">decision</option>
+                            <option value="final">final</option>
+                          </select>
+                        </label>
+                        <label className="workflow-field">
+                          <span className="workflow-field-label">Agent</span>
+                          <select value={nodeDraft.agent} onChange={(event) => setNodeDraft((prev) => ({ ...prev, agent: event.target.value }))}>
+                            <option value="">Select agent</option>
+                            {agents.map((agent) => <option key={agent.id} value={agent.name}>{agent.name}</option>)}
+                          </select>
+                        </label>
+                        <label className="workflow-field">
+                          <span className="workflow-field-label">Tools Override</span>
+                          <input value={nodeDraft.toolsText} onChange={(event) => setNodeDraft((prev) => ({ ...prev, toolsText: event.target.value }))} placeholder="optional" />
+                        </label>
+                        <label className="workflow-field">
+                          <span className="workflow-field-label">Skills Override</span>
+                          <input value={nodeDraft.skillsText} onChange={(event) => setNodeDraft((prev) => ({ ...prev, skillsText: event.target.value }))} placeholder="optional" />
+                        </label>
+                        {workflowBuilderMode === "advanced" ? (
+                          <>
+                            <label className="workflow-field">
+                              <span className="workflow-field-label">Position X</span>
+                              <input type="number" value={nodeDraft.x} onChange={(event) => setNodeDraft((prev) => ({ ...prev, x: Number(event.target.value || 0) }))} />
+                            </label>
+                            <label className="workflow-field">
+                              <span className="workflow-field-label">Position Y</span>
+                              <input type="number" value={nodeDraft.y} onChange={(event) => setNodeDraft((prev) => ({ ...prev, y: Number(event.target.value || 0) }))} />
+                            </label>
+                          </>
+                        ) : null}
+                      </div>
+                      {workflowBuilderMode === "advanced" ? (
+                        <div className="workflow-pairs-editor">
+                          <strong>Node Config</strong>
+                          {nodeDraft.configPairs.length ? nodeDraft.configPairs.map((pair, pairIndex) => (
+                            <div key={`node-config-${pairIndex}`} className="workflow-pair-row">
+                              <input
+                                placeholder="key"
+                                value={pair.key}
+                                onChange={(event) => setNodeDraft((prev) => ({
+                                  ...prev,
+                                  configPairs: prev.configPairs.map((entry, index) => index === pairIndex ? { ...entry, key: event.target.value } : entry),
+                                }))}
+                              />
+                              <input
+                                placeholder="value"
+                                value={pair.value}
+                                onChange={(event) => setNodeDraft((prev) => ({
+                                  ...prev,
+                                  configPairs: prev.configPairs.map((entry, index) => index === pairIndex ? { ...entry, value: event.target.value } : entry),
+                                }))}
+                              />
+                              <button
+                                type="button"
+                                className="icon-action-button icon-action-danger"
+                                onClick={() => setNodeDraft((prev) => ({
+                                  ...prev,
+                                  configPairs: prev.configPairs.filter((_, index) => index !== pairIndex),
+                                }))}
+                                aria-label="Remove node config field"
+                                title="Remove node config field"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )) : <p className="subtle">No custom config fields.</p>}
+                          <IconActionButton
+                            icon="+"
+                            label="Add node config field"
+                            tone="success"
+                            onClick={() => setNodeDraft((prev) => ({ ...prev, configPairs: [...prev.configPairs, { key: "", value: "" }] }))}
+                          />
+                        </div>
+                      ) : null}
                       <p className="subtle">Tools and skills auto-bind from the selected agent. Fill override fields only when needed.</p>
-                      <button type="button" className="secondary" onClick={() => withOut("workflowNodeSave", () => addWorkflowNode(selectedTemplate))} disabled={busy || !selectedTemplate}>Add / Update Node</button>
-                      <div className="ops-form-grid">
-                        <select value={edgeDraft.source_node_key} onChange={(event) => setEdgeDraft((prev) => ({ ...prev, source_node_key: event.target.value }))}>
-                          <option value="">Source node</option>
-                          {nodes.map((node) => <option key={`source-${node.key || node.node_key}`} value={node.key || node.node_key}>{node.key || node.node_key}</option>)}
-                        </select>
-                        <select value={edgeDraft.target_node_key} onChange={(event) => setEdgeDraft((prev) => ({ ...prev, target_node_key: event.target.value }))}>
-                          <option value="">Target node</option>
-                          {nodes.map((node) => <option key={`target-${node.key || node.node_key}`} value={node.key || node.node_key}>{node.key || node.node_key}</option>)}
-                        </select>
-                        <label className="workflow-toggle-row">
-                          <input type="checkbox" checked={edgeDraft.feedbackLoop} onChange={(event) => setEdgeDraft((prev) => ({ ...prev, feedbackLoop: event.target.checked }))} />
-                          Feedback loop
+                      <div className="workflow-action-row">
+                        <IconActionButton
+                          icon={editingNodeIndex !== null ? "✓" : "+"}
+                          label={editingNodeIndex !== null ? "Update node" : "Add node"}
+                          tone="success"
+                          onClick={() => withOut("workflowNodeSave", () => saveWorkflowNode(selectedTemplate))}
+                          disabled={busy || !selectedTemplate}
+                        />
+                        <IconActionButton icon="⌫" label="Clear node form" tone="slate" onClick={resetNodeDraft} disabled={busy} />
+                      </div>
+                        </>
+                      ) : null}
+
+                      {workflowEditorTab === "edge" ? (
+                        <>
+                      <h5 className="workflow-subhead">Edge Transition</h5>
+                      <div className="ops-form-grid workflow-form-grid">
+                        <label className="workflow-field">
+                          <span className="workflow-field-label">Source Node</span>
+                          <select value={edgeDraft.source_node_key} onChange={(event) => setEdgeDraft((prev) => ({ ...prev, source_node_key: event.target.value }))}>
+                            <option value="">Source node</option>
+                            {nodes.map((node) => <option key={`source-${node.key || node.node_key}`} value={node.key || node.node_key}>{node.key || node.node_key}</option>)}
+                          </select>
+                        </label>
+                        <label className="workflow-field">
+                          <span className="workflow-field-label">Target Node</span>
+                          <select value={edgeDraft.target_node_key} onChange={(event) => setEdgeDraft((prev) => ({ ...prev, target_node_key: event.target.value }))}>
+                            <option value="">Target node</option>
+                            {nodes.map((node) => <option key={`target-${node.key || node.node_key}`} value={node.key || node.node_key}>{node.key || node.node_key}</option>)}
+                          </select>
+                        </label>
+                        <label className="workflow-toggle-row workflow-field workflow-field-wide">
+                          <span className="workflow-field-label">Feedback Loop</span>
+                          <span>
+                            <input type="checkbox" checked={edgeDraft.feedbackLoop} onChange={(event) => setEdgeDraft((prev) => ({ ...prev, feedbackLoop: event.target.checked }))} />
+                            Feedback loop
+                          </span>
                         </label>
                       </div>
-                      <button type="button" className="secondary" onClick={() => setEdgeDraft((prev) => ({ ...prev, conditionPairs: [...prev.conditionPairs, { key: "field", value: "outputs.quality_review.enough_evidence" }, { key: "op", value: "eq" }, { key: "value", value: "false" }] }))}>Add condition preset</button>
-                      <button type="button" onClick={() => withOut("workflowEdgeSave", () => addWorkflowEdge(selectedTemplate))} disabled={busy || !selectedTemplate}>Add Edge</button>
+                      {workflowBuilderMode === "advanced" ? (
+                        <div className="workflow-pairs-editor">
+                          <strong>Edge Condition</strong>
+                          {edgeDraft.conditionPairs.length ? edgeDraft.conditionPairs.map((pair, pairIndex) => (
+                            <div key={`edge-condition-${pairIndex}`} className="workflow-pair-row">
+                              <input
+                                placeholder="key (field/op/value)"
+                                value={pair.key}
+                                onChange={(event) => setEdgeDraft((prev) => ({
+                                  ...prev,
+                                  conditionPairs: prev.conditionPairs.map((entry, index) => index === pairIndex ? { ...entry, key: event.target.value } : entry),
+                                }))}
+                              />
+                              <input
+                                placeholder="value"
+                                value={pair.value}
+                                onChange={(event) => setEdgeDraft((prev) => ({
+                                  ...prev,
+                                  conditionPairs: prev.conditionPairs.map((entry, index) => index === pairIndex ? { ...entry, value: event.target.value } : entry),
+                                }))}
+                              />
+                              <button
+                                type="button"
+                                className="icon-action-button icon-action-danger"
+                                onClick={() => setEdgeDraft((prev) => ({
+                                  ...prev,
+                                  conditionPairs: prev.conditionPairs.filter((_, index) => index !== pairIndex),
+                                }))}
+                                aria-label="Remove edge condition field"
+                                title="Remove edge condition field"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )) : <p className="subtle">No edge condition set. Leave empty for always-on transition.</p>}
+                          <div className="workflow-action-row">
+                            <IconActionButton
+                              icon="+"
+                              label="Add condition field"
+                              tone="success"
+                              onClick={() => setEdgeDraft((prev) => ({ ...prev, conditionPairs: [...prev.conditionPairs, { key: "", value: "" }] }))}
+                            />
+                            <IconActionButton
+                              icon="↺"
+                              label="Use retry preset"
+                              tone="info"
+                              onClick={() => setEdgeDraft((prev) => ({ ...prev, conditionPairs: [{ key: "field", value: "outputs.quality_review.enough_evidence" }, { key: "op", value: "eq" }, { key: "value", value: "false" }] }))}
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                      <div className="workflow-action-row">
+                        <IconActionButton
+                          icon={editingEdgeIndex !== null ? "✓" : "+"}
+                          label={editingEdgeIndex !== null ? "Update edge" : "Add edge"}
+                          tone="success"
+                          onClick={() => withOut("workflowEdgeSave", () => saveWorkflowEdge(selectedTemplate))}
+                          disabled={busy || !selectedTemplate}
+                        />
+                        <IconActionButton icon="⌫" label="Clear edge form" tone="slate" onClick={resetEdgeDraft} disabled={busy} />
+                      </div>
+                        </>
+                      ) : null}
+                    </div>
+
+                    <div className="workflow-lists-grid">
+                      <div className="workflow-crud-panel workflow-nodes-panel">
+                        <h4>Workflow Nodes</h4>
+                        <p className="subtle">Click any row to load it into the builder for editing.</p>
+                        <div className="workflow-node-list">
+                          {nodes.length ? nodes.map((node, index) => {
+                            const nodeKey = String(node.key || node.node_key || "").trim();
+                            const isEditing = editingNodeIndex === index;
+                            const nodeTools = Array.isArray(node.tools) ? node.tools : [];
+                            const nodeSkills = Array.isArray(node.skills) ? node.skills : [];
+                            return (
+                              <div
+                                key={nodeKey || `node-${index}`}
+                                className={`workflow-node-row${isEditing ? " workflow-node-row-active" : ""}`}
+                                role="button"
+                                tabIndex={0}
+                                onClick={(event) => {
+                                  if (event.target instanceof Element && event.target.closest("button")) return;
+                                  loadNodeDraft(node, index);
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    loadNodeDraft(node, index);
+                                  }
+                                }}
+                              >
+                                <div className="workflow-row-head">
+                                  <strong>{node.label || nodeKey}</strong>
+                                  <span className="workflow-row-index">#{index + 1}</span>
+                                </div>
+                                <span>{node.agent || "No agent"}</span>
+                                {isEditing ? (
+                                  <>
+                                    <small>{nodeTools.join(", ") || "No tools"}</small>
+                                    <small>{nodeSkills.join(", ") || "No skills"}</small>
+                                    <div className="workflow-row-actions">
+                                      <button
+                                        type="button"
+                                        className="workflow-row-btn"
+                                        onClick={() => withOut("workflowNodeReorder", () => moveWorkflowNode(selectedTemplate, index, -1), { notifySuccess: false })}
+                                        disabled={busy || index === 0}
+                                      >
+                                        Up
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="workflow-row-btn"
+                                        onClick={() => withOut("workflowNodeReorder", () => moveWorkflowNode(selectedTemplate, index, 1), { notifySuccess: false })}
+                                        disabled={busy || index === nodes.length - 1}
+                                      >
+                                        Down
+                                      </button>
+                                      <button type="button" className="workflow-row-btn workflow-row-btn-primary" onClick={() => loadNodeDraft(node, index)} disabled={busy}>
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="workflow-row-btn workflow-row-btn-danger"
+                                        onClick={() => withOut("workflowNodeDelete", () => removeWorkflowNode(selectedTemplate, index))}
+                                        disabled={busy}
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <small className="workflow-row-collapsed-hint">Click to edit</small>
+                                )}
+                              </div>
+                            );
+                          }) : <p className="subtle">No nodes available.</p>}
+                        </div>
+                      </div>
+
+                      <div className="workflow-crud-panel workflow-edge-list">
+                        <h4>Conditions and Feedback Loops</h4>
+                        <p className="subtle">Click any edge row to edit transition settings quickly.</p>
+                        {edges.length ? edges.map((edge, index) => (
+                          <div
+                            key={`${edge.from}-${edge.to}-${index}`}
+                            className={`workflow-edge-row${editingEdgeIndex === index ? " workflow-edge-row-active" : ""}`}
+                            role="button"
+                            tabIndex={0}
+                            onClick={(event) => {
+                              if (event.target instanceof Element && event.target.closest("button")) return;
+                              loadEdgeDraft(edge, index);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                loadEdgeDraft(edge, index);
+                              }
+                            }}
+                          >
+                            <div>
+                              <div className="workflow-row-head">
+                                <strong>{edge.from} → {edge.to}</strong>
+                                <span className="workflow-row-index">#{index + 1}</span>
+                              </div>
+                              {editingEdgeIndex === index ? <small>{conditionText(edge)}</small> : <small className="workflow-row-collapsed-hint">Click to edit</small>}
+                            </div>
+                            {editingEdgeIndex === index ? (
+                              <div className="workflow-row-actions">
+                                {edge.feedback_loop || nodes.findIndex((node) => String(node.key || node.node_key) === String(edge.to)) < nodes.findIndex((node) => String(node.key || node.node_key) === String(edge.from)) ? <span className="chip">feedback</span> : null}
+                                <button
+                                  type="button"
+                                  className="workflow-row-btn"
+                                  onClick={() => withOut("workflowEdgeReorder", () => moveWorkflowEdge(selectedTemplate, index, -1), { notifySuccess: false })}
+                                  disabled={busy || index === 0}
+                                >
+                                  Up
+                                </button>
+                                <button
+                                  type="button"
+                                  className="workflow-row-btn"
+                                  onClick={() => withOut("workflowEdgeReorder", () => moveWorkflowEdge(selectedTemplate, index, 1), { notifySuccess: false })}
+                                  disabled={busy || index === edges.length - 1}
+                                >
+                                  Down
+                                </button>
+                                <button type="button" className="workflow-row-btn workflow-row-btn-primary" onClick={() => loadEdgeDraft(edge, index)} disabled={busy}>
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="workflow-row-btn workflow-row-btn-danger"
+                                  onClick={() => withOut("workflowEdgeDelete", () => removeWorkflowEdge(selectedTemplate, index))}
+                                  disabled={busy}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        )) : <p className="subtle">No edges available.</p>}
+                      </div>
                     </div>
                   </section>
                 </div>

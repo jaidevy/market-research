@@ -16,15 +16,8 @@ from apps.messaging.models import InterAgentMessage
 from apps.monitoring.models import RuntimeEvent, TokenCostLedger
 from apps.runs.models import UnifiedRun, UnifiedRunStep, WorkflowTemplate
 from services.runtime.artifacts import write_node_artifact
+from services.runtime.llm_client import LLMConfigurationError, complete_json
 from services.runtime.tool_registry import dispatch, extract_tool_names
-
-
-class LLMConfigurationError(RuntimeError):
-    """Raised when the runtime LLM client is unavailable or misconfigured."""
-
-
-async def complete_json(*, system_prompt: str, user_payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
-    raise LLMConfigurationError("LLM backend is not available in this runtime.")
 
 
 class WorkflowState(TypedDict, total=False):
@@ -176,7 +169,9 @@ class LangGraphWorkflowRunner:
         entry_key = next((key for key in nodes if key not in incoming), next(iter(nodes)))
         graph = StateGraph(WorkflowState)
         for node_key, node in nodes.items():
-            graph.add_node(node_key, self._node_callable(run=run, node=node))
+            node_with_contract = dict(node)
+            node_with_contract["output_contract"] = self._derive_output_contract(node_key=node_key, edges=edges_by_source.get(node_key, []))
+            graph.add_node(node_key, self._node_callable(run=run, node=node_with_contract))
         graph.set_entry_point(entry_key)
 
         for node_key in nodes:
@@ -336,6 +331,7 @@ class LangGraphWorkflowRunner:
             state=state,
             tool_outputs=tool_outputs,
             skill_payloads=skill_payloads,
+            requested_tools=requested_tools,
         )
 
         for tool_name in postcompose_tools:
@@ -419,29 +415,16 @@ class LangGraphWorkflowRunner:
         state: WorkflowState,
         tool_outputs: dict[str, Any],
         skill_payloads: list[dict[str, str]],
+        requested_tools: list[str],
     ) -> dict[str, Any]:
         node_key = self._node_key(node)
-        if node_key == "quality_review":
-            source_output = (state.get("outputs") or {}).get("summarize") or {}
-            has_artifact = bool(source_output.get("artifact_path") or (source_output.get("tools") or {}).get("write_artifact"))
-            return {
-                "summary": "Quality review passed." if has_artifact else "Quality review requested another evidence pass.",
-                "enough_evidence": bool(has_artifact),
-                "reasons": [] if has_artifact else ["No written artifact was found."],
-            }
-        if node_key == "escalation":
-            objective = str(state.get("objective") or "").lower()
-            needs_escalation = any(term in objective for term in ["refund", "charged", "billing", "cancel", "legal"])
-            return {
-                "summary": "Escalation created." if needs_escalation else "No escalation required.",
-                "needs_escalation": needs_escalation,
-                "ticket": tool_outputs.get("ticket_create") if needs_escalation else {},
-            }
-
-        system_prompt = (
-            f"{agent.system_prompt}\n\n"
-            "You are executing one node in a LangGraph workflow. Return strict JSON with "
-            "summary, details, and confidence. Use only supplied tool outputs and state."
+        output_contract = self._output_contract_for_node(node=node, requested_tools=requested_tools)
+        required_fields = list(output_contract.keys())
+        system_prompt = self._build_system_prompt(
+            agent=agent,
+            node=node,
+            skill_payloads=skill_payloads,
+            required_fields=required_fields,
         )
         payload = {
             "agent": agent.name,
@@ -467,6 +450,9 @@ class LangGraphWorkflowRunner:
                 "additionalProperties": False,
             },
         }
+        for field_name, field_type in output_contract.items():
+            schema["schema"]["properties"][field_name] = self._schema_for_field_type(field_type)
+            schema["schema"]["required"].append(field_name)
         try:
             parsed = async_to_sync(complete_json)(
                 system_prompt=system_prompt,
@@ -489,7 +475,87 @@ class LangGraphWorkflowRunner:
             "summary": summary,
             "details": details,
             "confidence": self._coerce_float(parsed.get("confidence"), default=0.5),
+            **self._coerce_contract_fields(parsed=parsed, output_contract=output_contract),
         }
+
+    def _derive_output_contract(self, *, node_key: str, edges: list[dict[str, Any]]) -> dict[str, str]:
+        contract: dict[str, str] = {}
+        prefix = f"outputs.{node_key}."
+        for edge in edges:
+            condition = edge.get("condition")
+            if not isinstance(condition, dict):
+                continue
+            field = str(condition.get("field") or "").strip()
+            if not field.startswith(prefix):
+                continue
+            suffix = field[len(prefix) :].strip()
+            if not suffix:
+                continue
+            top_level_field = suffix.split(".", 1)[0].strip()
+            if not top_level_field:
+                continue
+            contract[top_level_field] = self._infer_field_type(condition.get("value"))
+        return contract
+
+    def _output_contract_for_node(self, *, node: dict[str, Any], requested_tools: list[str]) -> dict[str, str]:
+        contract: dict[str, str] = {}
+        raw_contract = node.get("output_contract")
+        if isinstance(raw_contract, dict):
+            for field_name, field_type in raw_contract.items():
+                name = str(field_name or "").strip()
+                if not name:
+                    continue
+                contract[name] = str(field_type or "string").strip().lower() or "string"
+        return contract
+
+    def _infer_field_type(self, value: Any) -> str:
+        if isinstance(value, bool):
+            return "boolean"
+        if isinstance(value, (int, float)):
+            return "number"
+        return "string"
+
+    def _schema_for_field_type(self, field_type: str) -> dict[str, Any]:
+        if field_type == "boolean":
+            return {"type": "boolean"}
+        if field_type == "number":
+            return {"type": "number"}
+        return {"type": "string"}
+
+    def _coerce_contract_fields(self, *, parsed: dict[str, Any], output_contract: dict[str, str]) -> dict[str, Any]:
+        coerced: dict[str, Any] = {}
+        for field_name, field_type in output_contract.items():
+            value = parsed.get(field_name)
+            if field_type == "boolean":
+                coerced[field_name] = bool(value)
+            elif field_type == "number":
+                coerced[field_name] = self._coerce_float(value, default=0.0)
+            else:
+                coerced[field_name] = str(value or "").strip()
+        return coerced
+
+    def _build_system_prompt(
+        self,
+        *,
+        agent: Agent,
+        node: dict[str, Any],
+        skill_payloads: list[dict[str, str]],
+        required_fields: list[str],
+    ) -> str:
+        skill_sections = [str(skill.get("markdown") or "").strip() for skill in skill_payloads if str(skill.get("markdown") or "").strip()]
+        skill_block = "\n\n".join(skill_sections)
+        required_block = ", ".join(required_fields)
+        node_objective = str(node.get("objective") or "").strip()
+        prompt_parts = [
+            str(agent.system_prompt or "").strip(),
+            f"Node objective: {node_objective}",
+            "You are executing one node in a LangGraph workflow. Use only supplied tool outputs and state.",
+        ]
+        if skill_block:
+            prompt_parts.append("Apply the linked skills exactly as guidance for reasoning and response quality:\n" + skill_block)
+        if required_block:
+            prompt_parts.append(f"Return strict JSON including required contract fields: {required_block}.")
+        return "\n\n".join(part for part in prompt_parts if part)
 
     def _load_allowed_skills(self, *, agent: Agent, node: dict[str, Any]) -> list[dict[str, str]]:
         allowed = {str(skill).strip() for skill in agent.skills if str(skill).strip()} if isinstance(agent.skills, list) else set()
@@ -559,7 +625,7 @@ class LangGraphWorkflowRunner:
             outputs = state.get("outputs") or {}
             visits = state.get("visits") or {}
             if int(visits.get(node_key, 0)) >= self.max_node_visits:
-                fallback = next((edge for edge in edges if str(edge.get("to") or "").strip() not in {node_key}), edges[-1])
+                fallback = edges[-1]
                 return self._edge_label(fallback)
             unconditional: dict[str, Any] | None = None
             for edge in edges:

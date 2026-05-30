@@ -6,14 +6,7 @@ from typing import Any
 from apps.agents.models import Skill
 from apps.runs.models import UnifiedRun
 from services.runtime.artifacts import write_final_artifact
-
-
-class LLMConfigurationError(RuntimeError):
-    """Raised when the runtime LLM client is unavailable or misconfigured."""
-
-
-async def complete_json(*, system_prompt: str, user_payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
-    raise LLMConfigurationError("LLM backend is not available in this runtime.")
+from services.runtime.llm_client import LLMConfigurationError, complete_json
 
 
 def summarize_run_state(run: UnifiedRun) -> dict[str, Any]:
