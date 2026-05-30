@@ -152,7 +152,7 @@ def _normalize_fragment(value: str) -> str:
 
 
 def _format_tool_decision(*, tool_name: str, payload: dict[str, Any]) -> str:
-    if tool_name in {"knowledge_base_search", "memory_read", "memory_write", "ticket_create", "send_channel_message", "read_file", "write_file", "read_url", "discord_rw", "backtest", "start_research_goal", "get_research_goal", "add_goal_evidence", "update_research_goal_status"}:
+    if tool_name in {"knowledge_base_search", "memory_read", "memory_write", "ticket_create", "send_channel_message", "read_file", "write_file", "read_url", "discord_rw"}:
         summary = str(payload.get("summary") or "").strip()
         status = str(payload.get("status") or "").strip()
         if summary:

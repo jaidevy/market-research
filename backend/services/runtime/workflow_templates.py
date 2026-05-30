@@ -1,25 +1,37 @@
 from __future__ import annotations
 
 from typing import Any
+from django.db import connection
 
 
 def seed_generic_workflow_assets() -> dict[str, Any]:
     from apps.agents.models import Agent, Skill, Tool
+    from apps.messaging.models import ApprovalTicket, ChannelConversation, InterAgentMessage
+    from apps.monitoring.models import TokenCostLedger
     from apps.runs.models import WorkflowTemplate
+
+    demo_tool_names = {str(spec["name"]) for spec in GENERIC_WORKFLOW_TOOLS}
+    demo_skill_names = {str(spec["name"]) for spec in GENERIC_WORKFLOW_SKILLS}
+    demo_agent_names = {str(spec["name"]) for spec in GENERIC_WORKFLOW_AGENTS}
+    demo_template_names = {str(spec["name"]) for spec in GENERIC_WORKFLOW_TEMPLATES}
 
     for spec in GENERIC_WORKFLOW_TOOLS:
         defaults = {key: value for key, value in spec.items() if key != "name"}
         defaults["is_system"] = True
+        defaults["is_active"] = True
         Tool.objects.update_or_create(name=spec["name"], defaults=defaults)
 
     for spec in GENERIC_WORKFLOW_SKILLS:
+        defaults = {key: value for key, value in spec.items() if key != "name"}
+        defaults["is_active"] = True
         Skill.objects.update_or_create(
             name=spec["name"],
-            defaults={key: value for key, value in spec.items() if key != "name"},
+            defaults=defaults,
         )
 
     for spec in GENERIC_WORKFLOW_AGENTS:
         defaults = {key: value for key, value in spec.items() if key != "name"}
+        defaults["is_active"] = True
         Agent.objects.update_or_create(name=spec["name"], defaults=defaults)
 
     templates = []
@@ -29,6 +41,29 @@ def seed_generic_workflow_assets() -> dict[str, Any]:
             defaults={key: value for key, value in spec.items() if key != "name"},
         )
         templates.append(template)
+
+    # Keep DB/UI strictly aligned to seeded demo assets only.
+    Tool.objects.exclude(name__in=demo_tool_names).delete()
+    Skill.objects.exclude(name__in=demo_skill_names).delete()
+    WorkflowTemplate.objects.exclude(name__in=demo_template_names).delete()
+
+    extra_agent_ids = list(Agent.objects.exclude(name__in=demo_agent_names).values_list("id", flat=True))
+    if extra_agent_ids:
+        InterAgentMessage.objects.filter(from_agent_id__in=extra_agent_ids).update(from_agent=None)
+        InterAgentMessage.objects.filter(to_agent_id__in=extra_agent_ids).update(to_agent=None)
+        ApprovalTicket.objects.filter(requested_by_id__in=extra_agent_ids).update(requested_by=None)
+        TokenCostLedger.objects.filter(agent_id__in=extra_agent_ids).update(agent=None)
+        ChannelConversation.objects.filter(target_agent_id__in=extra_agent_ids).delete()
+
+        # Legacy table from prior architecture can still block deletion in SQLite.
+        placeholders = ",".join(["%s"] * len(extra_agent_ids))
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"DELETE FROM workflows_workflownode WHERE agent_id IN ({placeholders})",
+                extra_agent_ids,
+            )
+
+        Agent.objects.filter(id__in=extra_agent_ids).delete()
 
     return {
         "tools": len(GENERIC_WORKFLOW_TOOLS),

@@ -256,19 +256,6 @@ async def _handle_write_file(config: dict, context: dict) -> dict:
     return {"status": "ok", "path": str(full_path.relative_to(Path.cwd()))}
 
 
-async def _handle_backtest(config: dict, context: dict) -> dict:
-    return {
-        "status": "ok",
-        "mode": "dry_run",
-        "note": "Backtest request captured. Connect a historical provider to enable execution.",
-    }
-
-
-async def _handle_research_goal(config: dict, context: dict) -> dict:
-    operation = str(config.get("operation") or context.get("operation") or "start").strip()
-    return {"status": "ok", "operation": operation, "payload": config or context}
-
-
 async def _handle_discord_rw(config: dict, context: dict) -> dict:
     from services.channels.discord import _send_outbound_message
 
@@ -305,11 +292,6 @@ TOOL_REGISTRY: dict[str, Handler] = {
     "memory_write": _handle_memory_write,
     "read_file": _handle_read_file,
     "write_file": _handle_write_file,
-    "backtest": _handle_backtest,
-    "start_research_goal": _handle_research_goal,
-    "get_research_goal": _handle_research_goal,
-    "add_goal_evidence": _handle_research_goal,
-    "update_research_goal_status": _handle_research_goal,
     "discord_rw": _handle_discord_rw,
 }
 

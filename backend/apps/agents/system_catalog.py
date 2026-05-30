@@ -94,47 +94,17 @@ SYSTEM_TOOLS: list[dict] = [
         "capabilities": ["read", "write"],
         "config_schema": {"operation": "string", "external_user_id": "string", "message": "string"},
     },
-    {
-        "name": "backtest",
-        "description": "Run a dry-run backtest request.",
-        "category": "research",
-        "capabilities": ["read"],
-        "config_schema": {},
-    },
-    {
-        "name": "start_research_goal",
-        "description": "Create or update a research goal.",
-        "category": "research",
-        "capabilities": ["write"],
-        "config_schema": {"operation": "string"},
-    },
-    {
-        "name": "get_research_goal",
-        "description": "Get current research goal state.",
-        "category": "research",
-        "capabilities": ["read"],
-        "config_schema": {},
-    },
-    {
-        "name": "add_goal_evidence",
-        "description": "Attach evidence to a research goal.",
-        "category": "research",
-        "capabilities": ["write"],
-        "config_schema": {},
-    },
-    {
-        "name": "update_research_goal_status",
-        "description": "Update research goal status.",
-        "category": "research",
-        "capabilities": ["write"],
-        "config_schema": {},
-    },
 ]
 
 
 STALE_SYSTEM_TOOL_NAMES = {
     "run_swarm",
     "list_swarm_presets",
+    "backtest",
+    "start_research_goal",
+    "get_research_goal",
+    "add_goal_evidence",
+    "update_research_goal_status",
 }
 
 STALE_SYSTEM_SKILL_NAMES = {
