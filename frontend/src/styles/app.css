@@ -2938,6 +2938,52 @@ pre {
   padding: 0;
 }
 
+.crud-subheader {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.crud-subheader-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.crud-subheader-controls {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.crud-subheader-controls .search-input {
+  width: 100%;
+}
+
+.themed-page-shell {
+  border: 1px solid rgba(110, 141, 183, 0.2);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(84, 162, 255, 0.12) 0%, transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 250, 255, 0.94) 100%);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08);
+  padding: 16px;
+}
+
+.themed-page-shell .agent-list-bar {
+  border-bottom: 1px solid rgba(112, 133, 166, 0.18);
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+}
+
+.themed-page-shell .editor-breadcrumb {
+  border: 1px solid rgba(112, 133, 166, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.74);
+  padding: 8px 10px;
+}
+
 .agent-list-bar {
   display: flex;
   align-items: center;
@@ -3085,44 +3131,22 @@ pre {
   gap: 10px;
 }
 
-.tool-library-card {
-  background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.12) 0%, transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(243, 249, 252, 0.96) 100%);
-}
-
-.tool-library-card::before {
-  background: linear-gradient(90deg, #0891b2 0%, #3b82f6 52%, #94a3b8 100%);
-}
-
-.skill-card {
-  background:
-    radial-gradient(circle at top right, rgba(16, 185, 129, 0.11) 0%, transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 252, 248, 0.96) 100%);
-}
-
-.skill-card::before {
-  background: linear-gradient(90deg, #0f6cbd 0%, #22c55e 48%, #f59e0b 100%);
-}
-
-.agent-profile-card {
-  background:
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.12) 0%, transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 249, 255, 0.96) 100%);
-}
-
-.agent-profile-card::before {
-  background: linear-gradient(90deg, #2563eb 0%, #0ea5e9 50%, #10b981 100%);
-}
-
+.tool-library-card,
+.skill-card,
+.agent-profile-card,
+.workflow-library-card,
 .workflow-card {
   background:
-    radial-gradient(circle at top right, rgba(245, 158, 11, 0.13) 0%, transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 249, 240, 0.96) 100%);
+    radial-gradient(circle at top right, rgba(30, 144, 255, 0.12) 0%, transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 248, 252, 0.96) 100%);
 }
 
+.tool-library-card::before,
+.skill-card::before,
+.agent-profile-card::before,
+.workflow-library-card::before,
 .workflow-card::before {
-  background: linear-gradient(90deg, #0f6cbd 0%, #f59e0b 56%, #facc15 100%);
+  background: linear-gradient(90deg, #0f6cbd 0%, #1ea672 54%, #f59e0b 100%);
 }
 
 .agent-card-header {

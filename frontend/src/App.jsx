@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { request } from "./api/client";
+import { CrudSubHeader } from "./components/CrudSubHeader";
 import { GlobalHeader } from "./components/GlobalHeader";
 import {
   agentTemplates,
@@ -1660,7 +1661,7 @@ export function App() {
   const renderTools = () => {
     if (toolView === "editor") {
       return (
-        <section className="agent-editor-wrap">
+        <section className="agent-editor-wrap themed-page-shell">
           <div className="editor-breadcrumb">
             <button type="button" className="back-btn" onClick={resetToolEditor}>← All Tools</button>
             <span className="breadcrumb-sep">/</span>
@@ -1787,58 +1788,52 @@ export function App() {
     });
 
     return (
-      <section className="agent-list-wrap">
-        <div className="agent-list-bar">
-          <div className="agent-list-bar-left">
-            <h2 className="screen-title">Tools</h2>
-            <span className="agent-count">{sorted.length} of {tools.length} shown</span>
+      <section className="agent-list-wrap themed-page-shell">
+        <CrudSubHeader title="Tools" meta={`${sorted.length} of ${tools.length} shown`}>
+          <input className="search-input" placeholder="Search tools..." value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} />
+          <div className="tool-filters-row">
+            <select className="toolbar-select" value={toolCategoryFilter} onChange={(e) => setToolCategoryFilter(e.target.value)}>
+              <option value="all">All categories</option>
+              {categoryOptions.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+            <select className="toolbar-select" value={toolCapabilityFilter} onChange={(e) => setToolCapabilityFilter(e.target.value)}>
+              <option value="all">All capabilities</option>
+              <option value="read">read</option>
+              <option value="write">write</option>
+            </select>
+            <select className="toolbar-select" value={toolStatusFilter} onChange={(e) => setToolStatusFilter(e.target.value)}>
+              <option value="all">All status</option>
+              <option value="active">active</option>
+              <option value="inactive">inactive</option>
+            </select>
+            <select className="toolbar-select" value={toolSort} onChange={(e) => setToolSort(e.target.value)}>
+              <option value="category">Sort: category</option>
+              <option value="name">Sort: name A-Z</option>
+              <option value="name_desc">Sort: name Z-A</option>
+              <option value="status">Sort: active first</option>
+            </select>
           </div>
-          <div className="agent-list-bar-right tool-toolbar">
-            <input className="search-input" placeholder="Search tools..." value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} />
-            <div className="tool-filters-row">
-              <select className="toolbar-select" value={toolCategoryFilter} onChange={(e) => setToolCategoryFilter(e.target.value)}>
-                <option value="all">All categories</option>
-                {categoryOptions.map((category) => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
-              <select className="toolbar-select" value={toolCapabilityFilter} onChange={(e) => setToolCapabilityFilter(e.target.value)}>
-                <option value="all">All capabilities</option>
-                <option value="read">read</option>
-                <option value="write">write</option>
-              </select>
-              <select className="toolbar-select" value={toolStatusFilter} onChange={(e) => setToolStatusFilter(e.target.value)}>
-                <option value="all">All status</option>
-                <option value="active">active</option>
-                <option value="inactive">inactive</option>
-              </select>
-              <select className="toolbar-select" value={toolSort} onChange={(e) => setToolSort(e.target.value)}>
-                <option value="category">Sort: category</option>
-                <option value="name">Sort: name A-Z</option>
-                <option value="name_desc">Sort: name Z-A</option>
-                <option value="status">Sort: active first</option>
-              </select>
-            </div>
-            <div className="tool-actions-row">
-              <button type="button" className="secondary" onClick={() => withOut("toolList", hydrateTools)} disabled={busy}>Refresh</button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  setToolSearch("");
-                  setToolCategoryFilter("all");
-                  setToolCapabilityFilter("all");
-                  setToolStatusFilter("all");
-                  setToolSort("category");
-                }}
-                disabled={busy}
-              >
-                Clear
-              </button>
-              <button type="button" onClick={() => { resetToolEditor(); setToolView("editor"); }} disabled={busy}>+ Add Tool</button>
-            </div>
+          <div className="tool-actions-row">
+            <button type="button" className="secondary" onClick={() => withOut("toolList", hydrateTools)} disabled={busy}>Refresh</button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setToolSearch("");
+                setToolCategoryFilter("all");
+                setToolCapabilityFilter("all");
+                setToolStatusFilter("all");
+                setToolSort("category");
+              }}
+              disabled={busy}
+            >
+              Clear
+            </button>
+            <button type="button" onClick={() => { resetToolEditor(); setToolView("editor"); }} disabled={busy}>+ Add Tool</button>
           </div>
-        </div>
+        </CrudSubHeader>
         {sorted.length === 0 ? (
           <p className="agent-empty">No tools found for the current search and filter combination.</p>
         ) : (
@@ -1884,7 +1879,7 @@ export function App() {
 
     if (skillView === "editor") {
       return (
-        <section className="agent-editor-wrap">
+        <section className="agent-editor-wrap themed-page-shell">
           <div className="editor-breadcrumb">
             <button type="button" className="back-btn" onClick={resetSkillEditor}>← All Skills</button>
             <span className="breadcrumb-sep">/</span>
@@ -2108,30 +2103,24 @@ export function App() {
     });
 
     return (
-      <section className="agent-list-wrap">
-        <div className="agent-list-bar">
-          <div className="agent-list-bar-left">
-            <h2 className="screen-title">Skills</h2>
-            <span className="agent-count">{filtered.length} of {skills.length} shown</span>
+      <section className="agent-list-wrap themed-page-shell">
+        <CrudSubHeader title="Skills" meta={`${filtered.length} of ${skills.length} shown`}>
+          <input className="search-input" placeholder="Search skills..." value={skillSearch} onChange={(e) => setSkillSearch(e.target.value)} />
+          <div className="tool-filters-row">
+            <select className="toolbar-select" value={skillCategoryFilter} onChange={(e) => setSkillCategoryFilter(e.target.value)}>
+              <option value="all">All categories</option>
+              {skillCategories.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
           </div>
-          <div className="agent-list-bar-right tool-toolbar">
-            <input className="search-input" placeholder="Search skills..." value={skillSearch} onChange={(e) => setSkillSearch(e.target.value)} />
-            <div className="tool-filters-row">
-              <select className="toolbar-select" value={skillCategoryFilter} onChange={(e) => setSkillCategoryFilter(e.target.value)}>
-                <option value="all">All categories</option>
-                {skillCategories.map((category) => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
-              </select>
-            </div>
-            <div className="tool-actions-row">
-              <button type="button" className="secondary" onClick={() => withOut("skillList", hydrateSkills)} disabled={busy}>Refresh</button>
-              <button type="button" className="secondary" onClick={() => withOut("starterSkills", createStarterSkills)} disabled={busy}>Load Starter Skills</button>
-              <button type="button" className="secondary" onClick={() => { setSkillSearch(""); setSkillCategoryFilter("all"); }} disabled={busy}>Clear</button>
-              <button type="button" onClick={() => { setSkillEditor(initialSkillEditor()); setSkillView("editor"); }} disabled={busy}>+ Add Skill</button>
-            </div>
+          <div className="tool-actions-row">
+            <button type="button" className="secondary" onClick={() => withOut("skillList", hydrateSkills)} disabled={busy}>Refresh</button>
+            <button type="button" className="secondary" onClick={() => withOut("starterSkills", createStarterSkills)} disabled={busy}>Load Starter Skills</button>
+            <button type="button" className="secondary" onClick={() => { setSkillSearch(""); setSkillCategoryFilter("all"); }} disabled={busy}>Clear</button>
+            <button type="button" onClick={() => { setSkillEditor(initialSkillEditor()); setSkillView("editor"); }} disabled={busy}>+ Add Skill</button>
           </div>
-        </div>
+        </CrudSubHeader>
 
         {filtered.length === 0 ? (
           <p className="agent-empty">No skills found for the current search and filter combination.</p>
@@ -2178,7 +2167,7 @@ export function App() {
 
     if (agentView === "editor") {
       return (
-        <section className="agent-editor-wrap">
+        <section className="agent-editor-wrap themed-page-shell">
           <div className="editor-breadcrumb">
             <button type="button" className="back-btn" onClick={() => setAgentView("grid")}>← All Agents</button>
             <span className="breadcrumb-sep">/</span>
@@ -2637,23 +2626,19 @@ export function App() {
     );
 
     return (
-      <section className="agent-list-wrap">
-        <div className="agent-list-bar">
-          <div className="agent-list-bar-left">
-            <h2 className="screen-title">Agents</h2>
-            <span className="agent-count">{agents.length} agent{agents.length !== 1 ? "s" : ""}</span>
-          </div>
-          <div className="agent-list-bar-right">
-            <input
-              className="search-input"
-              placeholder="Search by name or role…"
-              value={agentSearch}
-              onChange={(e) => setAgentSearch(e.target.value)}
-            />
+      <section className="agent-list-wrap themed-page-shell">
+        <CrudSubHeader title="Agents" meta={`${filtered.length} of ${agents.length} shown`}>
+          <input
+            className="search-input"
+            placeholder="Search by name or role..."
+            value={agentSearch}
+            onChange={(e) => setAgentSearch(e.target.value)}
+          />
+          <div className="tool-actions-row">
             <button type="button" className="secondary" onClick={() => withOut("agentList", hydrateAgents)} disabled={busy}>Refresh</button>
             <button type="button" onClick={() => { resetAgentEditor(); setAgentView("editor"); }}>+ Add Agent</button>
           </div>
-        </div>
+        </CrudSubHeader>
 
         {filtered.length === 0 ? (
           <div className="agent-empty">
@@ -2726,8 +2711,20 @@ export function App() {
       setWorkflowRunForm((prev) => ({ ...prev, [key]: value }));
     };
 
+    const filteredWorkflowTemplates = workflowTemplates.filter((template) => {
+      const searchHit =
+        workflowSearch === "" ||
+        String(template.name || "").toLowerCase().includes(workflowSearch.toLowerCase()) ||
+        String(template.description || "").toLowerCase().includes(workflowSearch.toLowerCase());
+      const statusHit =
+        workflowStatusFilter === "all" ||
+        (workflowStatusFilter === "active" && !!template.is_active) ||
+        (workflowStatusFilter === "inactive" && !template.is_active);
+      return searchHit && statusHit;
+    });
+
     return (
-      <section className="workflow-shell">
+      <section className="workflow-shell themed-page-shell">
         {showLauncher ? (
         <div className="workflow-hero-grid">
           <article className="card workflow-launch-card">
@@ -2796,24 +2793,22 @@ export function App() {
 
         {showCrud ? (
           workflowCrudView === "grid" ? (
-            <section className="agent-list-wrap">
-              <div className="agent-list-bar">
-                <div className="agent-list-bar-left">
-                  <h2 className="screen-title">Workflows</h2>
-                  <span className="agent-count">{workflowTemplates.length} template{workflowTemplates.length !== 1 ? "s" : ""}</span>
-                </div>
-                <div className="agent-list-bar-right tool-toolbar">
-                  <input
-                    className="search-input"
-                    placeholder="Search by name or description..."
-                    value={workflowSearch}
-                    onChange={(event) => setWorkflowSearch(event.target.value)}
-                  />
+            <section className="agent-list-wrap themed-page-shell">
+              <CrudSubHeader title="Workflows" meta={`${filteredWorkflowTemplates.length} of ${workflowTemplates.length} shown`}>
+                <input
+                  className="search-input"
+                  placeholder="Search by name or description..."
+                  value={workflowSearch}
+                  onChange={(event) => setWorkflowSearch(event.target.value)}
+                />
+                <div className="tool-filters-row">
                   <select className="toolbar-select" value={workflowStatusFilter} onChange={(event) => setWorkflowStatusFilter(event.target.value)}>
                     <option value="all">All status</option>
                     <option value="active">active</option>
                     <option value="inactive">inactive</option>
                   </select>
+                </div>
+                <div className="tool-actions-row">
                   <button type="button" className="secondary" onClick={() => withOut("workflowTemplates", hydrateWorkflowTemplates, { notifySuccess: false })} disabled={busy}>Refresh</button>
                   <button type="button" className="secondary" onClick={() => withOut("seedWorkflowTemplates", seedWorkflowTemplates)} disabled={busy}>Seed Defaults</button>
                   <button
@@ -2827,36 +2822,15 @@ export function App() {
                     + Add Workflow
                   </button>
                 </div>
-              </div>
+              </CrudSubHeader>
 
-              {workflowTemplates.filter((template) => {
-                const searchHit =
-                  workflowSearch === "" ||
-                  String(template.name || "").toLowerCase().includes(workflowSearch.toLowerCase()) ||
-                  String(template.description || "").toLowerCase().includes(workflowSearch.toLowerCase());
-                const statusHit =
-                  workflowStatusFilter === "all" ||
-                  (workflowStatusFilter === "active" && !!template.is_active) ||
-                  (workflowStatusFilter === "inactive" && !template.is_active);
-                return searchHit && statusHit;
-              }).length === 0 ? (
+              {filteredWorkflowTemplates.length === 0 ? (
                 <div className="agent-empty">
                   <p>No workflows match your search and filters.</p>
                 </div>
               ) : (
                 <div className="agent-card-grid">
-                  {workflowTemplates
-                    .filter((template) => {
-                      const searchHit =
-                        workflowSearch === "" ||
-                        String(template.name || "").toLowerCase().includes(workflowSearch.toLowerCase()) ||
-                        String(template.description || "").toLowerCase().includes(workflowSearch.toLowerCase());
-                      const statusHit =
-                        workflowStatusFilter === "all" ||
-                        (workflowStatusFilter === "active" && !!template.is_active) ||
-                        (workflowStatusFilter === "inactive" && !template.is_active);
-                      return searchHit && statusHit;
-                    })
+                  {filteredWorkflowTemplates
                     .map((template) => {
                       const templateNodes = Array.isArray(template.nodes) ? template.nodes.length : 0;
                       const templateEdges = Array.isArray(template.edges) ? template.edges.length : 0;
@@ -2893,7 +2867,7 @@ export function App() {
               )}
             </section>
           ) : (
-            <section className="agent-editor-wrap">
+            <section className="agent-editor-wrap themed-page-shell">
               <div className="editor-breadcrumb">
                 <button type="button" className="back-btn" onClick={() => setWorkflowCrudView("grid")}>← All Workflows</button>
                 <span className="breadcrumb-sep">/</span>

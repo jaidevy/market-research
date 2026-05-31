@@ -5,6 +5,8 @@ const viewHeaderMeta = {
   agents: { kicker: "Agents", title: "Agent Registry" },
   skills: { kicker: "Skills", title: "Skill Studio and Contracts" },
   workflows: { kicker: "Workflows", title: "LangGraph Workflow Builder" },
+  workflowCrud: { kicker: "Workflows", title: "LangGraph Workflow Builder" },
+  workflowLauncher: { kicker: "Workflows", title: "LangGraph Workflow Builder" },
   tools: { kicker: "Tools", title: "Tool Library and Capability Surface" },
 };
 
@@ -13,6 +15,8 @@ const viewLabels = {
   agents: "Agents",
   skills: "Skills",
   workflows: "Workflows",
+  workflowCrud: "Workflows",
+  workflowLauncher: "Workflow Launcher",
   tools: "Tools",
 };
 
