@@ -594,6 +594,247 @@ const IconActionButton = ({ icon, label, tone = "slate", className = "", type = 
   </button>
 );
 
+const NODE_TYPE_COLOR = {
+  agent: { fill: "#dbeafe", stroke: "#3b82f6", text: "#1d4ed8" },
+  tool: { fill: "#d1fae5", stroke: "#10b981", text: "#065f46" },
+  decision: { fill: "#fef3c7", stroke: "#f59e0b", text: "#92400e" },
+  final: { fill: "#ede9fe", stroke: "#8b5cf6", text: "#4c1d95" },
+};
+const NODE_W = 130;
+const NODE_H = 56;
+const H_GAP = 60;
+const V_GAP = 56;
+
+function layoutNodes(rawNodes, rawEdges) {
+  if (!rawNodes.length) return [];
+  const keys = rawNodes.map((n) => String(n.key || n.node_key || ""));
+  const keySet = new Set(keys);
+  // Build adjacency for topo sort
+  const inDeg = Object.fromEntries(keys.map((k) => [k, 0]));
+  const adj = Object.fromEntries(keys.map((k) => [k, []]));
+  for (const edge of rawEdges) {
+    const s = String(edge.from || "");
+    const t = String(edge.to || "");
+    if (keySet.has(s) && keySet.has(t) && s !== t) {
+      adj[s].push(t);
+      inDeg[t] = (inDeg[t] || 0) + 1;
+    }
+  }
+  // Kahn's algorithm for layers
+  const layer = Object.fromEntries(keys.map((k) => [k, 0]));
+  const queue = keys.filter((k) => inDeg[k] === 0);
+  let head = 0;
+  while (head < queue.length) {
+    const curr = queue[head++];
+    for (const next of adj[curr]) {
+      inDeg[next]--;
+      layer[next] = Math.max(layer[next], layer[curr] + 1);
+      if (inDeg[next] === 0) queue.push(next);
+    }
+  }
+  // Group by layer
+  const layerGroups = {};
+  for (const k of keys) {
+    const l = layer[k] || 0;
+    if (!layerGroups[l]) layerGroups[l] = [];
+    layerGroups[l].push(k);
+  }
+  const maxLayer = Math.max(...Object.keys(layerGroups).map(Number));
+  const positions = {};
+  for (let l = 0; l <= maxLayer; l++) {
+    const group = layerGroups[l] || [];
+    const totalW = group.length * NODE_W + (group.length - 1) * H_GAP;
+    const startX = -totalW / 2 + NODE_W / 2;
+    group.forEach((k, i) => {
+      positions[k] = { x: startX + i * (NODE_W + H_GAP), y: l * (NODE_H + V_GAP) };
+    });
+  }
+  return rawNodes.map((n) => {
+    const k = String(n.key || n.node_key || "");
+    return { ...n, _layoutX: positions[k]?.x ?? 0, _layoutY: positions[k]?.y ?? 0 };
+  });
+}
+
+function WorkflowGraphPreview({ nodes, edges, onNodeClick }) {
+  if (!nodes.length) {
+    return <p className="subtle wf-graph-empty">No nodes yet. Add nodes in the Node Editor tab.</p>;
+  }
+
+  const edgeLabel = (edge) => {
+    const condition = edge?.condition;
+    if (!condition || typeof condition !== "object") {
+      return "";
+    }
+    const field = String(condition.field || "").trim();
+    const opRaw = String(condition.op || "eq").trim().toLowerCase();
+    const op = opRaw === "eq" ? "=" : opRaw === "ne" ? "!=" : opRaw;
+    const value = String(condition.value ?? "").trim();
+    const fieldTail = field ? field.split(".").slice(-1)[0] : "condition";
+    const text = `${fieldTail} ${op} ${value}`.trim();
+    return text.length > 28 ? `${text.slice(0, 27)}…` : text;
+  };
+
+  const laid = layoutNodes(nodes, edges);
+  const xs = laid.map((n) => n._layoutX);
+  const ys = laid.map((n) => n._layoutY);
+  const minX = Math.min(...xs) - NODE_W / 2 - 36;
+  const maxX = Math.max(...xs) + NODE_W / 2 + 140;
+  const minY = Math.min(...ys) - NODE_H / 2 - 40;
+  const maxY = Math.max(...ys) + NODE_H / 2 + 44;
+  const vw = maxX - minX;
+  const vh = maxY - minY;
+  const posMap = Object.fromEntries(laid.map((n) => [String(n.key || n.node_key || ""), n]));
+
+  return (
+    <div className="wf-graph-wrap">
+      <svg
+        className="wf-graph-svg"
+        viewBox={`${minX} ${minY} ${vw} ${vh}`}
+        aria-label="Workflow graph preview"
+      >
+        <defs>
+          <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#6b7fa3" />
+          </marker>
+          <marker id="arrowhead-fb" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#f59e0b" />
+          </marker>
+        </defs>
+        {edges.map((edge, i) => {
+          const s = posMap[String(edge.from || "")];
+          const t = posMap[String(edge.to || "")];
+          if (!s || !t) return null;
+          const isSelfLoop = String(edge.from || "") === String(edge.to || "");
+          const isFb = Boolean(edge.feedback_loop) || t._layoutY <= s._layoutY;
+          const laneOffset = 26 + (i % 3) * 16;
+          let pathD = "";
+          let labelX = 0;
+          let labelY = 0;
+
+          if (isSelfLoop) {
+            const sx = s._layoutX + NODE_W / 2 - 10;
+            const sy = s._layoutY - NODE_H / 2 + 8;
+            const rx = 34;
+            const ry = 24;
+            pathD = `M${sx},${sy} C${sx + rx},${sy - ry} ${sx - rx},${sy - ry} ${sx - 2},${sy}`;
+            labelX = sx;
+            labelY = sy - ry - 6;
+          } else if (isFb) {
+            const sx = s._layoutX + NODE_W / 2;
+            const sy = s._layoutY;
+            const tx = t._layoutX + NODE_W / 2;
+            const ty = t._layoutY;
+            const laneX = Math.max(sx, tx) + laneOffset;
+            pathD = `M${sx},${sy} C${laneX},${sy} ${laneX},${ty} ${tx},${ty}`;
+            labelX = laneX + 6;
+            labelY = (sy + ty) / 2;
+          } else {
+            const sx = s._layoutX;
+            const sy = s._layoutY + NODE_H / 2;
+            const tx = t._layoutX;
+            const ty = t._layoutY - NODE_H / 2;
+            const bend = Math.max(20, Math.min(44, Math.abs(tx - sx) * 0.25));
+            pathD = `M${sx},${sy} C${sx},${sy + bend} ${tx},${ty - bend} ${tx},${ty}`;
+            labelX = (sx + tx) / 2;
+            labelY = (sy + ty) / 2 - 8;
+          }
+
+          const label = edgeLabel(edge);
+          const textWidth = Math.max(28, label.length * 5.5);
+          return (
+            <g key={`edge-${i}`} className={isFb ? "wf-graph-edge wf-graph-edge-feedback" : "wf-graph-edge"}>
+              <path
+                d={pathD}
+                fill="none"
+                stroke={isFb ? "#f59e0b" : "#6b7fa3"}
+                strokeWidth={isFb ? "1.8" : "1.5"}
+                strokeDasharray={isFb ? "4 3" : undefined}
+                markerEnd={isFb ? "url(#arrowhead-fb)" : "url(#arrowhead)"}
+                opacity="0.9"
+              />
+              {label ? (
+                <g className="wf-graph-edge-label" transform={`translate(${labelX}, ${labelY})`}>
+                  <rect x={-textWidth / 2} y={-8} rx="4" ry="4" width={textWidth} height="16" />
+                  <text textAnchor="middle" y="4">{label}</text>
+                </g>
+              ) : null}
+            </g>
+          );
+        })}
+        {laid.map((node) => {
+          const k = String(node.key || node.node_key || "");
+          const label = String(node.label || k || "?");
+          const type = String(node.node_type || "agent");
+          const tools = Array.isArray(node.tools) ? node.tools.map((tool) => String(tool || "").trim()).filter(Boolean) : [];
+          const toolLine = tools.length ? `tools: ${tools.join(", ")}` : "tools: none";
+          const colors = NODE_TYPE_COLOR[type] || { fill: "#f0f4fa", stroke: "#8b9cb3", text: "#374151" };
+          const x = node._layoutX - NODE_W / 2;
+          const y = node._layoutY - NODE_H / 2;
+          const truncated = label.length > 14 ? label.slice(0, 13) + "…" : label;
+          const truncatedTools = toolLine.length > 24 ? toolLine.slice(0, 23) + "…" : toolLine;
+          return (
+            <g
+              key={k}
+              className="wf-graph-node"
+              role="button"
+              tabIndex={0}
+              aria-label={`Node: ${label}`}
+              onClick={() => onNodeClick && onNodeClick(node)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNodeClick && onNodeClick(node); } }}
+            >
+              <rect
+                x={x} y={y} width={NODE_W} height={NODE_H}
+                rx="8" ry="8"
+                fill={colors.fill}
+                stroke={colors.stroke}
+                strokeWidth="1.6"
+              />
+              <text
+                x={node._layoutX} y={node._layoutY - 12}
+                textAnchor="middle"
+                fontSize="11"
+                fontWeight="700"
+                fill={colors.text}
+              >
+                {truncated}
+              </text>
+              <text
+                x={node._layoutX} y={node._layoutY + 2}
+                textAnchor="middle"
+                fontSize="9"
+                fill={colors.text}
+                opacity="0.72"
+              >
+                {type}
+              </text>
+              <text
+                x={node._layoutX} y={node._layoutY + 14}
+                textAnchor="middle"
+                fontSize="8"
+                fill={colors.text}
+                opacity="0.65"
+              >
+                {truncatedTools}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="wf-graph-legend">
+        {Object.entries(NODE_TYPE_COLOR).map(([type, c]) => (
+          <span key={type} className="wf-graph-legend-item">
+            <span className="wf-graph-legend-dot" style={{ background: c.fill, borderColor: c.stroke }} />
+            {type}
+          </span>
+        ))}
+        <span className="wf-graph-legend-item wf-graph-legend-fb">
+          <span className="wf-graph-legend-line wf-graph-legend-line-fb" />feedback
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const [agentEditor, setAgentEditor] = useState(initialAgentEditor);
   const [nodeDraft, setNodeDraft] = useState({
@@ -1101,7 +1342,7 @@ export function App() {
       withOut("workflowTemplates", hydrateWorkflowTemplates, { trackBusy: false, notifySuccess: false, notifyError: false });
       withOut("discordStatus", loadDiscordStatus, { trackBusy: false, notifySuccess: false, notifyError: false });
       withOut("discordConversations", loadDiscordConversations, { trackBusy: false, notifySuccess: false, notifyError: false });
-      withOut("agenticApprovals", () => request("GET", "/agentic/approvals/"), {
+      withOut("agenticApprovals", () => request("GET", "/approvals/"), {
         trackBusy: false,
         notifySuccess: false,
         notifyError: false,
@@ -2993,6 +3234,15 @@ export function App() {
                         >
                           Edge Editor
                         </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={workflowEditorTab === "graph"}
+                          className={workflowEditorTab === "graph" ? "workflow-editor-tab workflow-editor-tab-active" : "workflow-editor-tab"}
+                          onClick={() => setWorkflowEditorTab("graph")}
+                        >
+                          Graph Preview
+                        </button>
                       </div>
                       <p className="subtle">{workflowBuilderMode === "basic" ? "Basic mode shows only essential fields." : "Advanced mode exposes full controls for the selected editor tab."}</p>
 
@@ -3194,6 +3444,17 @@ export function App() {
                         <IconActionButton icon="⌫" label="Clear edge form" tone="slate" onClick={resetEdgeDraft} disabled={busy} />
                       </div>
                         </>
+                      ) : null}
+
+                      {workflowEditorTab === "graph" ? (
+                        <WorkflowGraphPreview
+                          nodes={nodes}
+                          edges={edges}
+                          onNodeClick={(node) => {
+                            const idx = nodes.findIndex((n) => String(n.key || n.node_key) === String(node.key || node.node_key));
+                            if (idx !== -1) loadNodeDraft(node, idx);
+                          }}
+                        />
                       ) : null}
                     </div>
 

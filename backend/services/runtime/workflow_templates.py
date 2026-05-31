@@ -204,6 +204,66 @@ GENERIC_WORKFLOW_SKILLS: list[dict[str, Any]] = [
             "5. If the user asks for status or approval, relay the current status or approval options instead of starting a new workflow."
         ),
     },
+    {
+        "name": "blog-outline-strategy",
+        "description": "Design a clear blog structure, audience angle, and section flow before drafting.",
+        "category": "procedure",
+        "trigger": "blog_outline",
+        "priority": 35,
+        "requires_tools": ["memory_read", "memory_write"],
+        "output_schema": "blog_outline",
+        "abort_on_fail": False,
+        "markdown": (
+            "## Blog Outline Strategy\n"
+            "Define target audience, search intent, core thesis, and section-by-section outline before writing. "
+            "Keep the structure practical and outcome-focused."
+        ),
+    },
+    {
+        "name": "blog-source-research",
+        "description": "Gather timely, relevant web evidence that supports the blog narrative.",
+        "category": "procedure",
+        "trigger": "blog_research",
+        "priority": 36,
+        "requires_tools": ["web_search"],
+        "output_schema": "blog_research_notes",
+        "abort_on_fail": False,
+        "markdown": (
+            "## Blog Source Research\n"
+            "Collect current and credible sources, pull supporting facts, and flag uncertainty or gaps that need clarification."
+        ),
+    },
+    {
+        "name": "blog-editorial-review",
+        "description": "Review for clarity, flow, and publish readiness.",
+        "category": "policy",
+        "trigger": "blog_review",
+        "priority": 37,
+        "requires_tools": [],
+        "output_schema": "blog_review_decision",
+        "abort_on_fail": False,
+        "markdown": (
+            "## Blog Editorial Review\n"
+            "Check coherence, claim support, readability, and actionability. "
+            "Set ready_to_publish=true only when the draft is clear, complete, and compliant with guardrails."
+        ),
+    },
+    {
+        "name": "blog-guardrail-preview",
+        "description": "Validate draft guardrails and prepare a concise preview before publish.",
+        "category": "policy",
+        "trigger": "blog_review",
+        "priority": 38,
+        "requires_tools": [],
+        "output_schema": "blog_guardrail_preview",
+        "abort_on_fail": False,
+        "markdown": (
+            "## Blog Guardrail And Preview\n"
+            "Run a strict guardrail check against harmful tone, explicit wording, and unsupported direct quotations. "
+            "Return clear violations when present. Also produce a short publish-preview summary that can be shown "
+            "before final publish. If any guardrail fails, set ready_to_publish=false."
+        ),
+    },
 ]
 
 
@@ -298,6 +358,66 @@ GENERIC_WORKFLOW_AGENTS: list[dict[str, Any]] = [
         "tools": ["ticket_create", "send_channel_message"],
         "channels": ["ui", "discord", "internal"],
         "skills": ["support-triage-policy", "quality-review-loop"],
+        "is_active": True,
+    },
+    {
+        "name": "BlogPlannerAgent",
+        "role": "Blog Strategy Planner",
+        "description": "Defines blog objective, audience focus, and section outline.",
+        "system_prompt": "Create a practical blog plan with a clear reader promise and a strong section structure.",
+        "tools": ["memory_read", "memory_write"],
+        "channels": ["ui", "internal"],
+        "skills": ["blog-outline-strategy"],
+        "is_active": True,
+    },
+    {
+        "name": "BlogResearchAgent",
+        "role": "Blog Source Researcher",
+        "description": "Collects supporting evidence and source context for the draft.",
+        "system_prompt": "Gather relevant and recent evidence that strengthens the planned blog narrative.",
+        "tools": ["web_search", "memory_write"],
+        "channels": ["ui", "internal"],
+        "skills": ["blog-source-research"],
+        "is_active": True,
+    },
+    {
+        "name": "BlogWriterAgent",
+        "role": "Long-form Blog Writer",
+        "description": "Drafts the blog article from plan and research context.",
+        "system_prompt": "Write a high-quality, reader-friendly blog draft grounded in supplied research context.",
+        "tools": ["write_artifact"],
+        "channels": ["ui", "internal"],
+        "skills": ["blog-outline-strategy", "blog-source-research"],
+        "guardrails": [
+            "Never use explicit words.",
+            "Never be rude.",
+            "Do not directly quote someone.",
+        ],
+        "is_active": True,
+    },
+    {
+        "name": "BlogEditorAgent",
+        "role": "Editorial Reviewer",
+        "description": "Reviews draft quality and determines publish readiness.",
+        "system_prompt": "Review draft quality, resolve weak spots, and decide whether the draft is ready to publish.",
+        "tools": [],
+        "channels": ["ui", "internal"],
+        "skills": ["blog-editorial-review", "blog-guardrail-preview"],
+        "is_active": True,
+    },
+    {
+        "name": "BlogPublisherAgent",
+        "role": "Blog Publisher",
+        "description": "Prepares and publishes the final blog output artifact and user message.",
+        "system_prompt": "Produce the final publish-ready blog output and communicate completion clearly.",
+        "tools": ["write_artifact", "send_channel_message"],
+        "channels": ["ui", "internal"],
+        "skills": ["blog-editorial-review", "blog-guardrail-preview"],
+        "guardrails": [
+            "Never use explicit words.",
+            "Never be rude.",
+            "Do not directly quote someone.",
+        ],
         "is_active": True,
     },
 ]
@@ -444,6 +564,94 @@ GENERIC_WORKFLOW_TEMPLATES: list[dict[str, Any]] = [
             {"from": "knowledge_base", "to": "draft_response"},
             {"from": "draft_response", "to": "escalation"},
             {"from": "escalation", "to": "reply"},
+        ],
+        "is_active": True,
+    },
+    {
+        "name": "Blog Writer Workflow",
+        "description": "Plan, research, draft, review, and publish a long-form blog post end-to-end.",
+        "version": "1.0",
+        "input_schema": {"objective": "string", "channel": "string"},
+        "output_schema": {"blog_post": "string", "artifact_path": "string"},
+        "default_agents": [
+            "BlogPlannerAgent",
+            "BlogResearchAgent",
+            "BlogWriterAgent",
+            "BlogEditorAgent",
+            "BlogPublisherAgent",
+        ],
+        "nodes": [
+            {
+                "key": "blog_plan",
+                "label": "Plan Blog",
+                "type": "agent",
+                "agent": "BlogPlannerAgent",
+                "tools": ["memory_read", "memory_write"],
+                "skills": ["blog-outline-strategy"],
+                "objective": "Define audience, thesis, outline, and narrative approach for the blog.",
+            },
+            {
+                "key": "blog_research",
+                "label": "Research Sources",
+                "type": "agent",
+                "agent": "BlogResearchAgent",
+                "tools": ["web_search", "memory_write"],
+                "skills": ["blog-source-research"],
+                "objective": "Collect supporting external evidence and source snippets.",
+            },
+            {
+                "key": "blog_draft",
+                "label": "Write Draft",
+                "type": "agent",
+                "agent": "BlogWriterAgent",
+                "tools": ["write_artifact"],
+                "skills": ["blog-outline-strategy", "blog-source-research"],
+                "objective": "Draft the full blog article with clear sections and actionable takeaways.",
+            },
+            {
+                "key": "blog_review",
+                "label": "Editorial Review",
+                "type": "agent",
+                "agent": "BlogEditorAgent",
+                "tools": [],
+                "skills": ["blog-editorial-review", "blog-guardrail-preview"],
+                "objective": "Review draft quality, enforce guardrails, and prepare preview guidance.",
+            },
+            {
+                "key": "blog_decision",
+                "label": "Editorial Decision",
+                "type": "decision",
+                "agent": "BlogEditorAgent",
+                "tools": [],
+                "skills": ["blog-editorial-review", "blog-guardrail-preview"],
+                "objective": "Decide whether to loop back for revision or continue to publish.",
+            },
+            {
+                "key": "blog_publish",
+                "label": "Publish Final",
+                "type": "final",
+                "agent": "BlogPublisherAgent",
+                "tools": ["write_artifact", "send_channel_message"],
+                "skills": ["blog-editorial-review", "blog-guardrail-preview"],
+                "objective": "Publish and return the final blog post.",
+            },
+        ],
+        "edges": [
+            {"from": "blog_plan", "to": "blog_research"},
+            {"from": "blog_research", "to": "blog_draft"},
+            {"from": "blog_draft", "to": "blog_review"},
+            {"from": "blog_review", "to": "blog_decision"},
+            {
+                "from": "blog_decision",
+                "to": "blog_draft",
+                "feedback_loop": True,
+                "condition": {"field": "outputs.blog_review.ready_to_publish", "op": "eq", "value": False},
+            },
+            {
+                "from": "blog_decision",
+                "to": "blog_publish",
+                "condition": {"field": "outputs.blog_review.ready_to_publish", "op": "eq", "value": True},
+            },
         ],
         "is_active": True,
     },

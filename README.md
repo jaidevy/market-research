@@ -64,6 +64,20 @@ Main backend slices:
 
 LangGraph is used because the challenge requires collaborative workflows with conditions and feedback loops. It provides explicit graph nodes, edges, conditional routing, and state transitions while keeping orchestration logic inspectable and testable.
 
+## How Agents Communicate
+
+Agents in this platform do not communicate as direct peer-to-peer chat sessions. Communication is workflow-mediated through shared run state and persisted step outputs.
+
+High-level flow:
+
+1. A workflow run is created with an objective.
+2. The orchestrator executes agents as ordered graph nodes.
+3. Each node writes structured output (status, payload, tool usage) to persisted run steps.
+4. Downstream nodes read prior step outputs from the same run context.
+5. The final responder composes a user-facing result from accumulated artifacts.
+
+This state-based communication model keeps execution traceable, deterministic, and debuggable.
+
 ## Quick Start
 
 ### Prerequisites

@@ -267,13 +267,38 @@ async def _handle_discord_rw(config: dict, context: dict) -> dict:
 
     message = str(config.get("message") or config.get("content") or context.get("objective") or "Run update.").strip()
     provider = str(config.get("provider") or "agent_tool").strip().lower()
-    send_result = await sync_to_async(_send_outbound_message, thread_sensitive=False)(provider, external_user_id, message, None)
+    raw_channel_id = config.get("discord_channel_id")
+    discord_channel_id: int | None
+    try:
+        discord_channel_id = int(str(raw_channel_id)) if raw_channel_id not in {None, ""} else None
+    except (TypeError, ValueError):
+        discord_channel_id = None
+
+    send_result = await sync_to_async(_send_outbound_message, thread_sensitive=False)(
+        provider,
+        external_user_id,
+        message,
+        discord_channel_id,
+    )
+
+    externally_sent = bool(send_result.get("ok"))
+    delivery_mode = "local_record_only"
+    if discord_channel_id and externally_sent:
+        delivery_mode = "discord_bot"
+    elif provider in {"webhook", "discord_webhook", "http"}:
+        delivery_mode = "discord_webhook" if externally_sent else "discord_webhook_failed"
+    elif provider == "bot":
+        delivery_mode = "discord_bot" if externally_sent else "discord_bot_not_running"
+
     return {
         "status": "ok",
         "operation": operation,
         "message": message,
         "user_id": external_user_id,
         "provider": provider,
+        "discord_channel_id": discord_channel_id,
+        "externally_sent": externally_sent,
+        "delivery_mode": delivery_mode,
         "send_result": send_result,
         "summary": "Discord send attempted.",
     }

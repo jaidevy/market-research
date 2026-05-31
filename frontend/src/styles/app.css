@@ -3698,3 +3698,120 @@ details > summary {
     width: 100%;
   }
 }
+
+/* ── Workflow Graph Preview ─────────────────────────────────── */
+.wf-graph-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.wf-graph-svg {
+  width: 100%;
+  min-height: 180px;
+  max-height: 420px;
+  border: 1px solid rgba(100, 135, 180, 0.22);
+  border-radius: 10px;
+  background: radial-gradient(ellipse at 60% 20%, rgba(219, 234, 254, 0.35) 0%, transparent 60%),
+    #f8fbff;
+  display: block;
+  overflow: visible;
+}
+
+.wf-graph-node {
+  cursor: pointer;
+  outline: none;
+}
+
+.wf-graph-node rect {
+  transition: filter 0.15s ease, stroke-width 0.15s ease;
+}
+
+.wf-graph-node:hover rect,
+.wf-graph-node:focus-visible rect {
+  filter: drop-shadow(0 3px 8px rgba(59, 130, 246, 0.28));
+  stroke-width: 2.2;
+}
+
+.wf-graph-node text {
+  pointer-events: none;
+  user-select: none;
+}
+
+.wf-graph-edge path {
+  transition: stroke-width 0.16s ease, opacity 0.16s ease;
+}
+
+.wf-graph-edge:hover path {
+  stroke-width: 2.2;
+  opacity: 1;
+}
+
+.wf-graph-edge-label rect {
+  fill: rgba(255, 255, 255, 0.95);
+  stroke: rgba(102, 127, 163, 0.45);
+  stroke-width: 1;
+}
+
+.wf-graph-edge-label text {
+  fill: #425a79;
+  font-size: 8px;
+  font-weight: 600;
+  user-select: none;
+  pointer-events: none;
+}
+
+.wf-graph-edge-feedback .wf-graph-edge-label rect {
+  fill: rgba(255, 248, 232, 0.96);
+  stroke: rgba(245, 158, 11, 0.5);
+}
+
+.wf-graph-edge-feedback .wf-graph-edge-label text {
+  fill: #995f00;
+}
+
+.wf-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 0 2px;
+  font-size: 0.75rem;
+  color: #5b718d;
+}
+
+.wf-graph-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.wf-graph-legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1.5px solid;
+  flex-shrink: 0;
+}
+
+.wf-graph-legend-line {
+  display: inline-block;
+  width: 22px;
+  height: 2px;
+  background: #6b7fa3;
+  border-radius: 1px;
+}
+
+.wf-graph-legend-line-fb {
+  background: repeating-linear-gradient(
+    90deg,
+    #f59e0b 0px,
+    #f59e0b 4px,
+    transparent 4px,
+    transparent 7px
+  );
+  height: 2px;
+}
+
+.wf-graph-empty {
+  padding: 24px 0;
+  text-align: center;
+}

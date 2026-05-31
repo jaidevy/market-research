@@ -288,7 +288,7 @@ class LangGraphWorkflowRunner:
         postcompose_tools = [tool_name for tool_name in requested_tools if tool_name in deferred_content_tools]
 
         def run_tool(tool_name: str, *, agent_output: dict[str, Any] | None = None) -> None:
-            config = self._tool_config(tool_name=tool_name, node=node, state=state)
+            config = self._tool_config(tool_name=tool_name, node=node, state=state, tool_outputs=tool_outputs)
             self._emit_message(
                 run=run,
                 from_agent=agent,
@@ -335,7 +335,13 @@ class LangGraphWorkflowRunner:
         )
 
         for tool_name in postcompose_tools:
-            config = self._tool_config(tool_name=tool_name, node=node, state=state, agent_output=agent_output)
+            config = self._tool_config(
+                tool_name=tool_name,
+                node=node,
+                state=state,
+                tool_outputs=tool_outputs,
+                agent_output=agent_output,
+            )
             self._emit_message(
                 run=run,
                 from_agent=agent,
@@ -572,13 +578,18 @@ class LangGraphWorkflowRunner:
         tool_name: str,
         node: dict[str, Any],
         state: WorkflowState,
+        tool_outputs: dict[str, Any] | None = None,
         agent_output: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         objective = str(state.get("objective") or "").strip()
         if tool_name == "web_search":
             return {"query": objective or str(node.get("objective") or "")}
         if tool_name == "read_url":
-            return {"url": str((state.get("input") or {}).get("url") or "").strip()}
+            input_url = str((state.get("input") or {}).get("url") or "").strip()
+            if input_url:
+                return {"url": input_url}
+            derived_url = self._extract_url_from_tool_outputs(tool_outputs or {})
+            return {"url": derived_url}
         if tool_name in {"write_artifact", "send_channel_message"}:
             content = self._tool_content(agent_output=agent_output, node=node, tool_name=tool_name)
             return {"path": f"{self._node_key(node)}.md", "content": content, "message": content, "channel": str((state.get("input") or {}).get("channel") or "ui")}
@@ -600,6 +611,34 @@ class LangGraphWorkflowRunner:
         if tool_name in {"memory_read", "memory_write"}:
             return {"agent_name": str(node.get("agent") or "workflow"), "key": self._node_key(node), "value": state.get("outputs") or {}}
         return {"objective": objective}
+
+    def _extract_url_from_tool_outputs(self, tool_outputs: dict[str, Any]) -> str:
+        web_result = tool_outputs.get("web_search")
+        if not isinstance(web_result, dict):
+            return ""
+
+        direct_url = str(web_result.get("url") or "").strip()
+        if direct_url:
+            return direct_url
+
+        links = web_result.get("links")
+        if isinstance(links, list):
+            for link in links:
+                if isinstance(link, str) and link.strip():
+                    return link.strip()
+                if isinstance(link, dict):
+                    candidate = str(link.get("url") or link.get("link") or "").strip()
+                    if candidate:
+                        return candidate
+
+        related = web_result.get("related")
+        if isinstance(related, list):
+            for item in related:
+                if isinstance(item, dict):
+                    candidate = str(item.get("url") or item.get("link") or "").strip()
+                    if candidate:
+                        return candidate
+        return ""
 
     def _tool_context(
         self,
