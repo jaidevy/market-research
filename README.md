@@ -232,6 +232,8 @@ make typecheck
 
 ## Submission Notes
 
+- Documentation of understanding: [DOCUMENTATION_OF_UNDERSTANDING.md](DOCUMENTATION_OF_UNDERSTANDING.md)
+- Problem analysis and statement of work: [docs/PROBLEM_ANALYSIS_AND_SOW.md](docs/PROBLEM_ANALYSIS_AND_SOW.md)
 - Runtime behavior is real and persisted: runs, steps, messages, events, and metrics are written to DB.
 - The system is local-first and can be demonstrated without cloud dependencies.
 - The architecture keeps clear boundaries between UI, runtime orchestration, and persistence.
