@@ -40,6 +40,8 @@ This project is structured for the hiring challenge and focuses on:
 
 ## Architecture
 
+Detailed system view: [Architecture Diagram](docs/architecture-diagram.md)
+
 ### Backend
 
 - Framework: Django + Django REST Framework
